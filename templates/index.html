@@ -1,86 +1,128 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OCPP CMS Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .stop-btn {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
-        <h1>OCPP CMS Dashboard</h1>
-        
-        <div class="stations-container">
-            <h2>Charging Stations</h2>
-            <table class="stations-table">
-                <thead>
-                    <tr>
-                        <th>Station ID</th>
-                        <th>Status</th>
-                        <th>Last Heartbeat</th>
-                        <th>Current Power (kW)</th>
-                        <th>Total Energy (kWh)</th>
-                        <th>Vendor</th>
-                        <th>Model</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for station in stations %}
-                    <tr>
-                        <td>{{ station.station_id }}</td>
-                        <td class="status-{{ station.status.lower() }}">{{ station.status }}</td>
-                        <td>{{ station.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                        <td>{{ station.current_power|round(2) }}</td>
-                        <td>{{ station.total_energy_consumed|round(2) }}</td>
-                        <td>{{ station.vendor }}</td>
-                        <td>{{ station.model }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="transactions-container">
-            <h2>Active Transactions</h2>
-            <table class="transactions-table">
-                <thead>
-                    <tr>
-                        <th>Transaction ID</th>
-                        <th>Station ID</th>
-                        <th>Start Time</th>
-                        <th>Energy Consumed (kWh)</th>
-                        <th>Max Power (kW)</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for transaction in transactions %}
-                    <tr>
-                        <td>{{ transaction.transaction_id }}</td>
-                        <td>{{ transaction.station_id }}</td>
-                        <td>{{ transaction.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                        <td>{{ transaction.energy_consumed|round(2) }}</td>
-                        <td>{{ transaction.max_power|round(2) }}</td>
-                        <td>
-                            <button onclick="stopTransaction('{{ transaction.transaction_id }}')">Stop Transaction</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
+    <h1>OCPP CMS Dashboard</h1>
+
+    <h2>Charging Stations</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Station ID</th>
+                <th>Status</th>
+                <th>Last Heartbeat</th>
+                <th>Current Power (kW)</th>
+                <th>Total Energy (kWh)</th>
+                <th>Vendor</th>
+                <th>Model</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for station in stations %}
+            <tr>
+                <td>{{ station.station_id }}</td>
+                <td>{{ station.status }}</td>
+                <td>{{ station.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>{{ station.current_power|round(2) }}</td>
+                <td>{{ station.total_energy_consumed|round(2) }}</td>
+                <td>{{ station.vendor }}</td>
+                <td>{{ station.model }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Active Transactions</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Transaction ID</th>
+                <th>Station ID</th>
+                <th>Start Time</th>
+                <th>Energy Consumed (kWh)</th>
+                <th>Max Power (kW)</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for transaction in transactions %}
+            <tr>
+                <td>{{ transaction.transaction_id }}</td>
+                <td>{{ transaction.station_id }}</td>
+                <td>{{ transaction.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>{{ transaction.energy_consumed|round(2) }}</td>
+                <td>{{ transaction.max_power|round(2) }}</td>
+                <td>
+                    <button class="stop-btn" onclick="stopTransaction('{{ transaction.transaction_id }}')">
+                        Stop Transaction
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
     <script>
-    function stopTransaction(transactionId) {
-        axios.post(`/stop-transaction/${transactionId}`)
-            .then(response => {
-                alert('Transaction stopped successfully');
-                location.reload();
+        function stopTransaction(transactionId) {
+            fetch(`/stop-transaction/${transactionId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('Transaction stopped successfully');
+                    location.reload(); // Refresh the page to update the transactions list
+                } else {
+                    alert('Failed to stop transaction: ' + data.message);
+                }
             })
             .catch(error => {
-                alert('Failed to stop transaction: ' + error.response.data.message);
+                console.error('Error:', error);
+                alert('An error occurred while stopping the transaction');
             });
-    }
+        }
     </script>
 </body>
 </html>

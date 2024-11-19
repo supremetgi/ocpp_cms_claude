@@ -56,6 +56,51 @@ class OCPPHandler:
                     "currentTime": datetime.utcnow().isoformat(),
                     "interval": 300
                 }
+
+
+
+
+
+            elif action == "StopTransactionFromCMS":
+                station_id = payload.get("chargePointId")
+                transaction_id = payload.get("transactionId")
+                
+                # Find the active transaction
+                transaction = db.query(Transaction).filter_by(
+                    transaction_id=str(transaction_id),
+                    is_active=True
+                ).first()
+                
+                if transaction:
+                    # Find the corresponding charging station
+                    station = db.query(ChargingStation).filter_by(station_id=station_id).first()
+                    
+                    if station:
+                        # Stop the transaction
+                        transaction.end_time = datetime.utcnow()
+                        transaction.is_active = False
+                        
+                        # Reset station status
+                        station.status = "Available"
+                        station.current_transaction = None
+                        station.current_power = 0
+                        
+                        db.commit()
+                        
+                        # If websocket connection exists, send stop transaction command
+                        for ws, conn_station_id in self.active_connections.items():
+                            if conn_station_id == station_id:
+                                stop_payload = {
+                                    "transactionId": transaction_id
+                                }
+                                await ws.send_json([2, str(uuid.uuid4()), "StopTransaction", stop_payload])
+                                break
+                        
+                        return {"status": "Accepted"}
+                
+                return {"status": "Rejected", "reason": "Transaction not found"}
+
+
                 
             elif action == "StartTransaction":
                 station_id = payload.get("chargePointId")
@@ -84,6 +129,12 @@ class OCPPHandler:
                     "idTagInfo": {"status": "Accepted"}
                 }
                 
+
+
+
+
+
+
             elif action == "Meter":
                 station_id = payload.get("chargePointId")
                 current_power = payload.get("power", 0)
@@ -109,6 +160,18 @@ class OCPPHandler:
                     db.commit()
                 
                 return {"status": "Accepted"}
+
+
+
+
+
+
+
+
+
+
+
+
                 
             elif action == "StopTransaction":
                 station_id = payload.get("chargePointId")
