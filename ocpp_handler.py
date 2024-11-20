@@ -24,7 +24,7 @@ class OCPPHandler:
             
             if message_type_id == 2:  # Call
                 response = await self.handle_call(websocket, action, payload)
-                await websocket.send(json.dumps([3, unique_id, response]))
+                await websocket.send_text(json.dumps([3, unique_id, response]))
                 
         except Exception as e:
             logging.error(f"Error handling message: {e}")
@@ -34,94 +34,70 @@ class OCPPHandler:
         db = SessionLocal()
         try:
             if action == "BootNotification":
-                # Extract vendor and model from payload
+                # Get the charge point ID from the payload
+                charge_point_id = payload.get("chargePointId")
                 vendor = payload.get("chargePointVendor")
                 model = payload.get("chargePointModel")
-                charge_point_id = payload.get("chargePointId")
                 
-                station = ChargingStation(
-                    station_id=charge_point_id,
-                    status="Available",
-                    last_heartbeat=datetime.utcnow(),
-                    vendor=vendor,
-                    model=model,
-                    current_power=0,
-                    total_energy_consumed=0
-                )
-                db.merge(station)
-                db.commit()
+                logging.info(f"Processing BootNotification for station {charge_point_id}")
+                logging.info(f"Payload: {payload}")
+                
+                # Check if station exists
+                station = db.query(ChargingStation).filter_by(station_id=charge_point_id).first()
+                
+                if station:
+                    # Update existing station
+                    station.vendor = vendor
+                    station.model = model
+                    station.last_heartbeat = datetime.utcnow()
+                    station.status = "Available"
+                else:
+                    # Create new station
+                    station = ChargingStation(
+                        station_id=charge_point_id,
+                        vendor=vendor,
+                        model=model,
+                        status="Available",
+                        last_heartbeat=datetime.utcnow(),
+                        current_power=0.0,
+                        total_energy_consumed=0.0
+                    )
+                    db.add(station)
+                
+                try:
+                    db.commit()
+                    logging.info(f"Successfully processed BootNotification for station {charge_point_id}")
+                except Exception as e:
+                    db.rollback()
+                    logging.error(f"Database error during BootNotification: {e}")
+                    raise
                 
                 return {
                     "status": "Accepted",
                     "currentTime": datetime.utcnow().isoformat(),
                     "interval": 300
                 }
-
-
-
-
-
-            elif action == "StopTransactionFromCMS":
-                station_id = payload.get("chargePointId")
-                transaction_id = payload.get("transactionId")
-                
-                # Find the active transaction
-                transaction = db.query(Transaction).filter_by(
-                    transaction_id=str(transaction_id),
-                    is_active=True
-                ).first()
-                
-                if transaction:
-                    # Find the corresponding charging station
-                    station = db.query(ChargingStation).filter_by(station_id=station_id).first()
-                    
-                    if station:
-                        # Stop the transaction
-                        transaction.end_time = datetime.utcnow()
-                        transaction.is_active = False
-                        
-                        # Reset station status
-                        station.status = "Available"
-                        station.current_transaction = None
-                        station.current_power = 0
-                        
-                        db.commit()
-                        
-                        # If websocket connection exists, send stop transaction command
-                        for ws, conn_station_id in self.active_connections.items():
-                            if conn_station_id == station_id:
-                                stop_payload = {
-                                    "transactionId": transaction_id
-                                }
-                                await ws.send_json([2, str(uuid.uuid4()), "StopTransaction", stop_payload])
-                                break
-                        
-                        return {"status": "Accepted"}
-                
-                return {"status": "Rejected", "reason": "Transaction not found"}
-
-
                 
             elif action == "StartTransaction":
                 station_id = payload.get("chargePointId")
-                transaction_id = payload.get("transactionId")
-                meter_start = payload.get("meterStart", 0)
+                transaction_id = str(payload.get("transactionId"))
+                meter_start = float(payload.get("meterStart", 0))
                 
                 transaction = Transaction(
-                    transaction_id=str(transaction_id),
+                    transaction_id=transaction_id,
                     station_id=station_id,
                     start_time=datetime.utcnow(),
                     meter_start=meter_start,
                     is_active=True,
-                    energy_consumed=0,
-                    max_power=0
+                    energy_consumed=0.0,
+                    max_power=0.0
                 )
                 
                 db.add(transaction)
                 station = db.query(ChargingStation).filter_by(station_id=station_id).first()
                 if station:
                     station.status = "Charging"
-                    station.current_transaction = str(transaction_id)
+                    station.current_transaction = transaction_id
                 db.commit()
                 
                 return {
@@ -129,30 +105,21 @@ class OCPPHandler:
                     "idTagInfo": {"status": "Accepted"}
                 }
                 
-
-
-
-
-
-
             elif action == "Meter":
                 station_id = payload.get("chargePointId")
-                current_power = payload.get("power", 0)
+                current_power = float(payload.get("power", 0))
                 
                 station = db.query(ChargingStation).filter_by(station_id=station_id).first()
                 if station and station.current_transaction:
-                    # Update station power
                     station.current_power = current_power
                     
-                    # Update transaction
                     transaction = db.query(Transaction).filter_by(
                         transaction_id=station.current_transaction,
                         is_active=True
                     ).first()
                     
                     if transaction:
-                        # Calculate energy consumed (kWh) assuming 5-second intervals
-                        energy_increment = (current_power * 5) / 3600  # Convert to kWh
+                        energy_increment = (current_power * 5) / 3600
                         transaction.energy_consumed += energy_increment
                         transaction.max_power = max(transaction.max_power, current_power)
                         station.total_energy_consumed += energy_increment
@@ -160,25 +127,14 @@ class OCPPHandler:
                     db.commit()
                 
                 return {"status": "Accepted"}
-
-
-
-
-
-
-
-
-
-
-
-
                 
             elif action == "StopTransaction":
                 station_id = payload.get("chargePointId")
-                transaction_id = payload.get("transactionId")
+                transaction_id = str(payload.get("transactionId"))
                 
                 transaction = db.query(Transaction).filter_by(
-                    transaction_id=str(transaction_id)
+                    transaction_id=transaction_id,
+                    is_active=True
                 ).first()
                 
                 if transaction:
@@ -192,9 +148,13 @@ class OCPPHandler:
                         station.current_power = 0
                     
                     db.commit()
-                    
+                
                 return {"idTagInfo": {"status": "Accepted"}}
                 
+        except Exception as e:
+            logging.error(f"Error in handle_call: {e}")
+            db.rollback()
+            raise
         finally:
             db.close()
             
