@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from pathlib import Path
 import uvicorn
+import logging
 from database import SessionLocal, ChargingStation, Transaction
 from ocpp_handler import OCPPHandler
 
@@ -12,6 +13,10 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 ocpp_handler = OCPPHandler()
+
+
+
+
 
 @app.get("/")
 async def home(request: Request):
@@ -109,5 +114,12 @@ async def websocket_endpoint(websocket: WebSocket, station_id: str):
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+
+
+
+
+
 
 # Rest of the code remains the same

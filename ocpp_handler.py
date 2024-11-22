@@ -29,6 +29,10 @@ class OCPPHandler:
         except Exception as e:
             logging.error(f"Error handling message: {e}")
             logging.error(f"Message received: {message}")
+
+
+
+
             
     async def handle_call(self, websocket, action, payload):
         db = SessionLocal()
@@ -150,6 +154,25 @@ class OCPPHandler:
                     db.commit()
                 
                 return {"idTagInfo": {"status": "Accepted"}}
+
+
+            elif action == "StopTransactionFromCMS":
+                    transaction_id = payload.get("transactionId")
+                    transaction = db.query(Transaction).filter_by(transaction_id=transaction_id).first()
+                    
+                    if transaction:
+                        transaction.end_time = datetime.utcnow()
+                        transaction.is_active = False
+                        
+                        station = db.query(ChargingStation).filter_by(station_id=transaction.station_id).first()
+                        if station:
+                            station.status = "Available"
+                            station.current_transaction = None
+                            station.current_power = 0
+                        
+                        db.commit()
+                        
+                    return {"status": "Accepted", "message": "Transaction stopped"}
                 
         except Exception as e:
             logging.error(f"Error in handle_call: {e}")
