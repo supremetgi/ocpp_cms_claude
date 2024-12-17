@@ -1,128 +1,257 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OCPP CMS Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f5f5f5;
+    }
+
+
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+    }
+
+    th,
+    td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+
+    th {
+        background-color: #f4f4f4;
+    }
+
+    .status-Available {
+        color: green;
+    }
+
+    .status-Charging {
+        color: blue;
+    }
+
+    .status-Faulted {
+        color: red;
+    }
+
+    .updated {
+        animation: highlight 2s;
+    }
+
+    @keyframes highlight {
+        0% {
+            background-color: #ffeb3b;
         }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
+
+        100% {
+            background-color: transparent;
         }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-        h1, h2 {
-            color: #333;
-        }
-        .stop-btn {
-            background-color: #f44336;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            cursor: pointer;
-            border-radius: 4px;
-        }
+    }
     </style>
 </head>
-<body>
-    <h1>OCPP CMS Dashboard</h1>
 
-    <h2>Charging Stations</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Station ID</th>
-                <th>Status</th>
-                <th>Last Heartbeat</th>
-                <th>Current Power (kW)</th>
-                <th>Total Energy (kWh)</th>
-                <th>Vendor</th>
-                <th>Model</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for station in stations %}
-            <tr>
-                <td>{{ station.station_id }}</td>
-                <td>{{ station.status }}</td>
-                <td>{{ station.last_heartbeat.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                <td>{{ station.current_power|round(2) }}</td>
-                <td>{{ station.total_energy_consumed|round(2) }}</td>
-                <td>{{ station.vendor }}</td>
-                <td>{{ station.model }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="container mx-auto bg-white shadow-lg rounded-lg overflow-hidden">
+        <header class="bg-blue-600 text-white p-6">
+            <h1>OCPP CMS Dashboard</h1>
+        </header>
+        <h2 class="text-2xl font-semibold text-gray-800 mb-6 border-b pb-2">Charging Stations</h2>
+        <table class="w-full bg-white shadow rounded-lg overflow-hidden" id="stations-table">
+            <thead class="bg-gray-200">
+                <tr class="text-left">
+                    <th class="p-3">Station ID</th>
+                    <th class="p-3">Status</th>
+                    <th class="p-3">Current Power (kW)</th>
+                    <th class="p-3">Total Energy (kWh)</th>
+                    <th class="p-3">price</th>
+                    <th class="p-3">Vendor</th>
+                    <th class="p-3">Model</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for station in stations %}
+                <tr class="border-b hover:bg-gray-50 transition duration-200" id="station-{{ station.station_id }}">
+                    <td>{{ station.station_id }}</td>
+                    <td class="status-{{ station.status }}">{{ station.status }}</td>
+                    <td class="power">{{ "%.2f"|format(station.current_power) }}</td>
+                    <td class="energy">{{ "%.2f"|format(station.total_energy_consumed) }}</td>
+                    <td class = "price">{{ "%.2f"|format(station.total_energy_consumed * 50) }}₹</td>
+                    <td>{{ station.vendor }}</td>
+                    <td>{{ station.model }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <h2 class="text-2xl font-semibold text-gray-800 mb-6 border-b pb-2">Active Transactions</h2>
+        <table id="transactions-table">
+            <thead>
+                <tr>
+                    <th class="p-3">Transaction ID</th>
+                    <th class="p-3">Station ID</th>
+                    <th class="p-3">Start Time</th>
+                    <th class="p-3">Energy Consumed (kWh)</th>
+                    <th class="p-3">Max Power (kW)</th>
+                    <th class="p-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for transaction in transactions %}
+                <tr id="transaction-{{ transaction.transaction_id }}">
+                    <td>{{ transaction.transaction_id }}</td>
+                    <td>{{ transaction.station_id }}</td>
+                    <td>{{ transaction.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td class="energy">{{ "%.2f"|format(transaction.energy_consumed) }}</td>
+                    <td class="max-power">{{ "%.2f"|format(transaction.max_power) }}</td>
+                    <td>
+                        <button onclick="stopTransaction('{{ transaction.transaction_id }}')" bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition duration-200>Stop Transaction</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <footer class="bg-gray-200 p-4 text-center text-gray-600">
+            © 2024 OCPP Charging Management System
+        </footer>
+        <script>
+        // WebSocket connection
+        const ws = new WebSocket(`ws://${window.location.host}/ws/updates`);
 
-    <h2>Active Transactions</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Transaction ID</th>
-                <th>Station ID</th>
-                <th>Start Time</th>
-                <th>Energy Consumed (kWh)</th>
-                <th>Max Power (kW)</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for transaction in transactions %}
-            <tr>
-                <td>{{ transaction.transaction_id }}</td>
-                <td>{{ transaction.station_id }}</td>
-                <td>{{ transaction.start_time.strftime('%Y-%m-%d %H:%M:%S') }}</td>
-                <td>{{ transaction.energy_consumed|round(2) }}</td>
-                <td>{{ transaction.max_power|round(2) }}</td>
-                <td>
-                    <button class="stop-btn" onclick="stopTransaction('{{ transaction.transaction_id }}')">
-                        Stop Transaction
-                    </button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
 
-    <script>
-        function stopTransaction(transactionId) {
-            fetch(`/stop-transaction/${transactionId}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    alert('Transaction stopped successfully');
-                    location.reload(); // Refresh the page to update the transactions list
-                } else {
-                    alert('Failed to stop transaction: ' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while stopping the transaction');
+            switch (data.type) {
+                case 'station_update':
+                    updateStation(data.station);
+                    break;
+                case 'new_transaction':
+                    addTransaction(data.transaction);
+                    break;
+                case 'transaction_update':
+                    updateTransaction(data.transaction);
+                    updateStation(data.station);
+                    break;
+                case 'transaction_ended':
+                    removeTransaction(data.transaction_id);
+                    break;
+            }
+        };
+
+        function updateStation(station) {
+            const row = $(`#station-${station.station_id}`);
+            if (row.length) {
+                row.find('.status-Available, .status-Charging, .status-Faulted')
+                    .attr('class', `status-${station.status}`)
+                    .text(station.status);
+                row.find('.power').text(station.current_power.toFixed(2));
+                row.find('.energy').text(station.total_energy_consumed.toFixed(2));
+                row.addClass('updated');
+                setTimeout(() => row.removeClass('updated'), 2000);
+            }
+        }
+
+        function addTransaction(transaction) {
+            if (!$(`#transaction-${transaction.transaction_id}`).length) {
+                const newRow = `
+                    <tr id="transaction-${transaction.transaction_id}">
+                        <td>${transaction.transaction_id}</td>
+                        <td>${transaction.station_id}</td>
+                        <td>${transaction.start_time}</td>
+                        <td class="energy">${transaction.energy_consumed.toFixed(2)}</td>
+                        <td class="max-power">${transaction.max_power.toFixed(2)}</td>
+                        <td>
+                            <button onclick="stopTransaction('${transaction.transaction_id}')">Stop Transaction</button>
+                        </td>
+                    </tr>
+                `;
+                $('#transactions-table tbody').append(newRow);
+            }
+        }
+
+        function updateTransaction(transaction) {
+            const row = $(`#transaction-${transaction.transaction_id}`);
+            if (row.length) {
+                row.find('.energy').text(transaction.energy_consumed.toFixed(2));
+                row.find('.max-power').text(transaction.max_power.toFixed(2));
+                row.addClass('updated');
+                setTimeout(() => row.removeClass('updated'), 2000);
+            }
+        }
+
+        function removeTransaction(transactionId) {
+            $(`#transaction-${transactionId}`).fadeOut(400, function() {
+                $(this).remove();
             });
         }
-    </script>
+
+        // function stopTransaction(transactionId) {
+        //     console.log('function called with ', tran);
+        //     fetch(`/stop-transaction/${transactionId}`, {
+        //         method: 'POST',
+        //     })
+        //     .then(response => response.json())
+        //     .then(data => {
+        //         if (data.status === 'error') {
+        //             alert('Error stopping transaction: ' + data.message);
+        //         }
+        //     })
+        //     .catch(error => {
+        //         console.error('Error:', error);
+        //         alert('Error stopping transaction');
+        //     });
+        // }
+
+
+        function stopTransaction(transactionId) {
+            console.log('Function called with ', transactionId);
+
+            fetch(`/stop-transaction/${transactionId}`, {
+                    method: 'POST',
+                })
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    console.log('Response ok:', response.ok);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Received data:', data);
+                    if (data.status === 'error') {
+                        alert('Error stopping transaction: ' + data.message);
+                    } else {
+                        alert('Transaction stopped successfully');
+                        window.location.reload(); // Reload to reflect changes
+                    }
+                })
+                .catch(error => {
+                    console.error('Fetch Error:', error);
+                    alert('Error stopping transaction');
+                });
+        }
+
+
+
+
+
+
+
+
+        // Reconnection logic
+        ws.onclose = function() {
+            console.log('WebSocket closed. Attempting to reconnect...');
+            setTimeout(() => {
+                window.location.reload();
+            }, 5000);
+        };
+        </script>
 </body>
+
 </html>

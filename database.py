@@ -1,10 +1,12 @@
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import logging
 from datetime import datetime
 
 Base = declarative_base()
-engine = create_engine('sqlite:///ocpp_cms.db', echo=True)
+logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+engine = create_engine('sqlite:///ocpp_cms.db')
 SessionLocal = sessionmaker(bind=engine)
 
 class ChargingStation(Base):
@@ -33,5 +35,18 @@ class Transaction(Base):
     is_active = Column(Boolean, default=True)
     energy_consumed = Column(Float, default=0)  # Energy consumed in this transaction
     max_power = Column(Float, default=0)  # Maximum power during transaction
+
+
+class Tariff(Base):
+    __tablename__ = 'Tariffs'
+    
+    id = Column(Integer, primary_key=True)
+    station_id = Column(String)
+    pricing_model = Column(String)
+    rate_per_kwh = Column(Float)
+    rate_per_minute = Column(Float)
+
+
+
 
 Base.metadata.create_all(engine)

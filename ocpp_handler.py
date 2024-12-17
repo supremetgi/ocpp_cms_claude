@@ -11,6 +11,41 @@ class OCPPHandler:
         self.active_connections = {}
         self.charging_stations = {}
         
+
+
+    async def broadcast_station_update(self, station):
+        if hasattr(self, 'ws_manager'):
+            station_data = {
+                "station_id": station.station_id,
+                "status": station.status,
+                "current_power": station.current_power,
+                "total_energy_consumed": station.total_energy_consumed
+            }
+            await self.ws_manager.broadcast({
+                "type": "station_update",
+                "station": station_data
+            })
+
+
+
+    async def broadcast_transaction_update(self, transaction, event_type="transaction_update"):
+        if hasattr(self, 'ws_manager'):
+            transaction_data = {
+                "transaction_id": transaction.transaction_id,
+                "station_id": transaction.station_id,
+                "start_time": transaction.start_time.strftime('%Y-%m-%d %H:%M:%S'),
+                "energy_consumed": transaction.energy_consumed,
+                "max_power": transaction.max_power
+            }
+            await self.ws_manager.broadcast({
+                "type": event_type,
+                "transaction": transaction_data
+            })
+
+
+
+
+
     async def handle_message(self, websocket, message):
         try:
             msg = json.loads(message)
@@ -96,13 +131,22 @@ class OCPPHandler:
                     energy_consumed=0.0,
                     max_power=0.0
                 )
+
+
                 
+   
                 db.add(transaction)
                 station = db.query(ChargingStation).filter_by(station_id=station_id).first()
                 if station:
                     station.status = "Charging"
                     station.current_transaction = transaction_id
+
+                await self.broadcast_station_update(station)
+                await self.broadcast_transaction_update(transaction, "new_transaction")
                 db.commit()
+
+
+
                 
                 return {
                     "transactionId": transaction_id,
@@ -129,6 +173,12 @@ class OCPPHandler:
                         station.total_energy_consumed += energy_increment
                     
                     db.commit()
+
+                    await self.broadcast_station_update(station)
+                    if transaction:
+                        await self.broadcast_transaction_update(transaction)
+
+
                 
                 return {"status": "Accepted"}
                 
@@ -152,6 +202,12 @@ class OCPPHandler:
                         station.current_power = 0
                     
                     db.commit()
+
+                    await self.broadcast_station_update(station)
+                    await self.ws_manager.broadcast({
+                        "type": "transaction_ended",
+                        "transaction_id": transaction_id
+                    })
                 
                 return {"idTagInfo": {"status": "Accepted"}}
 
